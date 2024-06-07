@@ -1,0 +1,86 @@
+---
+title: "homework 3"
+author: "Huang Zhehan"
+date: "2024-04-04"
+output: html_document
+---
+
+## 作业内容概述
+
+下载并分析世界卫生组织空气质量数据。提出1个或2个问题，用数据分析与可视化的方式回答问题。要求充分运用`dplyr`和`tidyr`中的数据操作函数。
+
+## 导入相关数据包
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(conflicted)
+conflict_prefer("stats", "dplyr")
+```
+
+## 所需数据导入
+
+```{r}
+data = read_xlsx("who_ambient_air_quality_database_version_2024_(v6.1).xlsx", sheet = 3, na = "NA")
+```
+
+### 问题1：中国和美国哪个的PM2.5浓度更高？
+
+```{r}
+data |> 
+  dplyr::filter(country_name %in% c("China", "United States of America")) |> 
+  select(country_name, pm25_concentration, year) |> 
+  dplyr::filter(year != 2010 & year != 2021) |> 
+  ggplot(aes(y=factor(year), x=pm25_concentration, color = country_name))+
+    theme_bw()+
+    geom_boxplot()+
+    scale_x_log10()+
+    labs(x=expression("PM"[2.5]*" Concentration (µg/m"^3*")"), y="")+
+    theme(legend.title = element_blank())  
+```
+
+从图中不难发现，两国的PM2.5浓度都呈现逐年下降的趋势，但中国的PM2.5浓度仍远高于美国。
+
+### 问题2：在各大洲区域PM2.5浓度和二氧化氮浓度之间有什么关系吗？
+
+```{r}
+region_labels <- c("4_Eur" = "European region",
+                   "6_Wpr" = "Western Pacific region",
+                   "2_Amr" = "Region of the Americas",
+                   "5_Emr" = "Eastern Mediterranean region",
+                   "1_Afr" = "African region",
+                   "3_Sear" = "South-East Asian region",
+                   "7_NonMS" = "non-member state"
+                   )
+
+d1 <-
+  data |> 
+  select(who_region, pm25_concentration, no2_concentration, year) |> 
+  dplyr::filter(who_region != "7_NonMS") |> 
+  mutate(pm25_concentration_z = (pm25_concentration - mean(pm25_concentration, na.rm = TRUE)) / sd(pm25_concentration, na.rm = TRUE)) |> 
+  mutate(no2_concentration_z = (no2_concentration - mean(no2_concentration, na.rm = TRUE)) / sd(no2_concentration, na.rm = TRUE)) |> 
+  dplyr::filter(year %in% c(2010:2021)) |> 
+  mutate(region_label = region_labels[as.character(who_region)])
+
+d2 <-
+  d1 |> 
+  select(pm25_concentration_z, no2_concentration_z, year)
+
+ggplot(d1, aes(x=pm25_concentration_z, y=no2_concentration_z, color=region_label))+
+  theme_bw()+
+  geom_point(data = d2, 
+             aes(x=pm25_concentration_z, y=no2_concentration_z), 
+             color = "grey80", 
+             alpha = 0.6)+
+  geom_jitter(width = 0.8, height = 0.8, alpha = 0.5)+
+  scale_y_continuous(limits = c(0, 5)) +
+  scale_x_continuous(limits = c(0, 15)) +
+  facet_wrap(~region_label)+
+  labs(x=expression("Standarize PM"[2.5]*" Concentration"), 
+       y=expression("Standarize NO"[2]*" Concentration"),
+       color = "")+
+  theme(legend.position = "bottom") + 
+  guides(color = guide_legend(nrow = 2)) 
+```
+
+从上图可以看出，二氧化氮的浓度和PM2.5的浓度之间存在一定的正相关关系，这种规律在东南亚和西太平洋区域尤为突出。
